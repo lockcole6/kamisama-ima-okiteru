@@ -16,6 +16,8 @@ var _suggest_box: PanelContainer
 var _suggest_label: Label
 var _go: Button
 var _suggestion: Dictionary = {}
+var _hello: Label
+var _moon  # icon.gd（時間帯で太陽／月）
 
 
 func _ready() -> void:
@@ -61,14 +63,14 @@ func _ready() -> void:
 		var st := Icon.make("sparkle", Color(1, 1, 1, s[2]), s[1])
 		st.position = s[0]
 		header.add_child(st)
-	var moon := Icon.make("moon", Color("ffe28a"), 30)
-	moon.position = Vector2(18, 16)
-	header.add_child(moon)
-	var hello := UITheme.label("おかえりなさい、カミサマ", 18, Color.WHITE, true)
-	hello.position = Vector2(56, 18)
-	hello.add_theme_constant_override("outline_size", 5)
-	hello.add_theme_color_override("font_outline_color", UITheme.PURPLE.darkened(0.45))
-	header.add_child(hello)
+	_moon = Icon.make("moon", Color("ffe28a"), 30)
+	_moon.position = Vector2(18, 16)
+	header.add_child(_moon)
+	_hello = UITheme.label("おかえりなさい、カミサマ", 18, Color.WHITE, true)
+	_hello.position = Vector2(56, 18)
+	_hello.add_theme_constant_override("outline_size", 5)
+	_hello.add_theme_color_override("font_outline_color", UITheme.PURPLE.darkened(0.45))
+	header.add_child(_hello)
 	_sub = UITheme.label("", 12, Color(1, 1, 1, 0.85), true)
 	_sub.position = Vector2(58, 50)
 	header.add_child(_sub)
@@ -127,8 +129,8 @@ func _ready() -> void:
 
 func show_report(seconds: int, events: Array) -> void:
 	var hours := seconds / 3600.0
-	if seconds < Sim.REPORT_THRESHOLD:
-		return
+	_hello.text = "おかえりなさい、カミサマ"
+	_moon.set_kind("moon", Color("ffe28a"))
 	if hours < 1.0:
 		_title.text = "カミサマが少し目を離した間に"
 	elif hours < 12.0:
@@ -138,7 +140,20 @@ func show_report(seconds: int, events: Array) -> void:
 	else:
 		_title.text = "カミサマがいない間に"
 	_sub.text = "%s留守にしていた" % Sim.format_duration(seconds)
+	_fill(events)
 
+
+## 眠って目覚めた（時間帯が1つ進んだ）
+func show_wake(from_seg: Dictionary, to_seg: Dictionary, events: Array) -> void:
+	_hello.text = "%sになった" % to_seg["name"]
+	var night: bool = to_seg["id"] in ["night", "midnight"]
+	_moon.set_kind("moon" if night else "sun", Color("ffe28a"))
+	_sub.text = "%d日目・%sから眠っていた" % [Sim.day, from_seg["name"]]
+	_title.text = "カミサマが眠っている間に"
+	_fill(events)
+
+
+func _fill(events: Array) -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	# 重要度の高い順（同じなら古い順）

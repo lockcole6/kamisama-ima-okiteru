@@ -2,14 +2,14 @@ extends Node
 ## セーブ／ロード。user://save.json に町の状態全体とログを保存する。
 
 const PATH := "user://save.json"
-const VERSION := 3  # 2: 祈り（prayer）を追加 / 3: 教義・夢・風（コンセプト v2）
+const VERSION := 4  # 2: 祈り / 3: 教義・夢・風 / 4: 時間帯制（現実時間から切り離し）
 
 
 func save_game() -> void:
 	Sim.last_seen = GameClock.now()
 	var data := {
 		"version": VERSION,
-		"clock_offset": GameClock.offset,
+		"clock_time": GameClock.time,
 		"sim": Sim.to_dict(),
 		"doctrine": Doctrine.to_dict(),
 		"logs": LogManager.entries,
@@ -33,7 +33,7 @@ func load_game() -> bool:
 	# 形式が変わったらここで移行処理を書く。今は非対応バージョンなら新規扱い
 	if int(data.get("version", 0)) != VERSION:
 		return false
-	GameClock.offset = float(data.get("clock_offset", 0.0))
+	GameClock.time = int(data.get("clock_time", 0))
 	Sim.from_dict(data["sim"])
 	Doctrine.from_dict(data.get("doctrine", {}))
 	LogManager.entries = data.get("logs", [])
@@ -50,6 +50,3 @@ func _notification(what: int) -> void:
 		NOTIFICATION_WM_CLOSE_REQUEST, NOTIFICATION_APPLICATION_PAUSED:
 			if Sim.running:
 				save_game()
-		NOTIFICATION_APPLICATION_RESUMED:
-			if Sim.running:
-				Sim.check_absence()

@@ -35,6 +35,7 @@ func _ready() -> void:
 	hud.open_log_requested.connect(log_panel.open)
 	hud.selection_changed.connect(town.select)
 	Sim.away_report.connect(away_report.show_report)
+	Sim.woke_up.connect(away_report.show_wake)
 	Sim.god_woke.connect(town.on_god_woke)
 	Sim.boot()
 	town.refresh()

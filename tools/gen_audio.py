@@ -283,6 +283,8 @@ def sfx():
     fan = seq(["C5", "E5", "G5", "C6", None, "E6"], 0.09, lambda f, t: 0.3 * bell(f, t) + 0.15 * tri(f, t) * math.exp(-t * 6), 1.4)
     add(fan, 0.54, 1.3, lambda t: sum(0.08 * math.sin(2 * math.pi * freq(n) * t) for n in ["C5", "E5", "G5", "C6"]) * math.exp(-t * 2.2))
     write_wav("sfx_doctrine.wav", fan, gain=0.6)
+    write_wav("sfx_sleep.wav", seq(["E6", "C6", "A5", "E5"], 0.16, lambda f, t: 0.4 * bell(f, t), 1.4), gain=0.45)
+    write_wav("sfx_wake.wav", seq(["C5", "E5", "G5", "C6", "E6"], 0.07, lambda f, t: 0.35 * bell(f, t), 1.0), gain=0.5)
     write_wav("sfx_guide.wav", seq(["G5", "C6"], 0.08, lambda f, t: 0.4 * bell(f, t), 0.6), gain=0.4)
 
 

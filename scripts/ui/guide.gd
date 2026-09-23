@@ -9,12 +9,13 @@ const SPEAKERS := ["mimi", "tome", "kaz", "sen", "nob"]
 ## [id, 本文]。上から順に、条件を満たしたものを1つずつ出す
 const TIPS := [
 	["intro", "カミサマ、起きてる？ {name}だよ。\nこの町のみんなは、カミサマのことを知ってるの。見てるだけでもいいし、ちょっかいを出してもいいんだって。"],
+	["sleep", "ちょっかいは、1つの時間に2回まで。\n終わったら右下の「眠る」で次の時間へ進むよ。起きたら、その間に何があったか分かるの。"],
 	["prayer", "頭に金色の「祈」が出てる人は、カミサマにお願いしてるの。タップすると、何をお願いしてるか分かるよ。"],
 	["card", "祈ってる人に、つつく・夢・風・雨のどれかが届くと、その人は「答え」だと思うの。\nいい意味か悪い意味かは、その人が勝手に決めちゃうんだ。"],
 	["answered", "あ、答えだと思ったみたい！\n何もしないと、そのうち祈るのをやめちゃう。それもカミサマの自由だけどね。"],
 	["doctrine", "誰かが「教え」を言い出したよ！\n同じことが何回か続くと、みんなそこに意味を見つけちゃうの。右下の「聖典」に書いてあるよ。"],
 	["question", "見て、「〜なら、○○をお送りください」って祈ってる！\nカミサマの答え方を、みんな覚えはじめたんだね。そのちょっかいを送ればイエス、何もしなければノーだよ。"],
-	["dream", "夜はみんな寝てるよ。寝てる人をタップすると、夢を見せられるの。\n朝になったら、その人が夢の意味を話すんだって。"],
+	["dream", "深夜はみんな寝てるよ。寝てる人をタップすると、夢を見せられるの。\n朝になったら、その人が夢の意味を話すんだって。"],
 	["wind", "下の「風」は、町のどこかをタップして吹かせるの。「雨」は町じゅうに降るよ。\nどっちも、みんなが勝手に意味を考えるんだ。"],
 	["death", "お墓ができちゃった……。\nお墓をタップすると、その人の最後の言葉が読めるよ。町はずっと覚えてるんだって。"],
 	["lonely", "カミサマがいない時間が長いと、みんな不安になるみたい。\n「カミサマは死んだ」って言う人も出てくるかも。"],
@@ -111,6 +112,8 @@ func _ready_for(id: String) -> bool:
 	match id:
 		"intro":
 			return true
+		"sleep":
+			return seen.has("intro")
 		"prayer":
 			return not Sim.praying_residents().is_empty()
 		"card", "answered":
@@ -120,7 +123,7 @@ func _ready_for(id: String) -> bool:
 		"question":
 			return Sim.praying_residents().any(func(r): return r["prayer"]["id"] == "question")
 		"dream":
-			return (hour >= 22 or hour < 6) and Sim.dream_available() and seen.has("intro")
+			return hour < 6 and Sim.dream_available() and seen.has("intro")
 		"wind":
 			return seen.has("card") and hour >= 7 and hour < 21
 		"death":

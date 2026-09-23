@@ -47,6 +47,7 @@ func _ready() -> void:
 	Sim.resident_bubble.connect(func(_id, text): play_for_bubble(text))
 	Sim.prayer_started.connect(func(_id): play("bell"))
 	Doctrine.doctrine_event.connect(func(_k, _d): play("doctrine"))
+	Sim.woke_up.connect(func(_a, _b, _e): play("wake"))
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) == OK:
 		muted = bool(cfg.get_value("audio", "muted", false))

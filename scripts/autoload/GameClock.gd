@@ -1,47 +1,40 @@
 extends Node
-## 現実時刻の取得と、デバッグ用の時間操作（加速・時刻ずらし）。
-## ゲーム内時刻 = 端末の現実時刻 + offset。
+## ゲーム内の時計。現実の時刻とはつながっていない（CONCEPT.md 8章の見直し）。
+## 時間はカミサマが「眠る」ときだけ進む（Sim.sleep）。time は UNIX 秒の形で持つ（日付表示のため）。
 
-signal speed_changed(speed: float)
-
-var offset: float = 0.0  # デバッグ用の時刻ずらし（秒）。セーブに含める
-var speed: float = 1.0   # デバッグ用の時間加速倍率
+var time: int = 0
 
 
-func _process(delta: float) -> void:
-	if speed != 1.0:
-		offset += delta * (speed - 1.0)
-
-
-## ゲーム内の現在時刻（UNIX秒）
 func now() -> int:
-	return int(Time.get_unix_time_from_system() + offset)
+	return time
 
 
-## UNIX秒 → 端末のローカル時刻の辞書（year, month, day, hour, minute, second）
+func advance(seconds: int) -> void:
+	time += seconds
+
+
+## 新しい町：今日の日付の hour 時から始める
+func start_today(hour: float) -> void:
+	var bias := _bias()
+	var real := int(Time.get_unix_time_from_system())
+	var local_midnight := (real + bias) - (real + bias) % 86400
+	time = local_midnight - bias + int(hour * 3600.0)
+
+
+## UNIX秒 → ローカル時刻の辞書（year, month, day, hour, minute, second）
 func local(unix: int) -> Dictionary:
-	var bias: int = int(Time.get_time_zone_from_system().get("bias", 0))
-	return Time.get_datetime_dict_from_unix_time(unix + bias * 60)
+	return Time.get_datetime_dict_from_unix_time(unix + _bias())
 
 
 func hour(unix: int) -> int:
 	return int(local(unix)["hour"])
 
 
-func set_speed(s: float) -> void:
-	speed = s
-	speed_changed.emit(s)
-
-
-func advance(seconds: int) -> void:
-	offset += seconds
-
-
-## 次に「h時00分」になるまでの秒数（今がちょうどh時00分以降なら翌日のh時）
-func seconds_until_hour(h: int) -> int:
-	var d := local(now())
+## 次に「hour 時（小数可）」になるまでの秒数。ちょうどその時刻なら翌日
+func seconds_until(hour_f: float) -> int:
+	var d := local(time)
 	var cur: int = int(d["hour"]) * 3600 + int(d["minute"]) * 60 + int(d["second"])
-	var diff := h * 3600 - cur
+	var diff := int(hour_f * 3600.0) - cur
 	if diff <= 0:
 		diff += 86400
 	return diff
@@ -55,3 +48,7 @@ func format_hm(unix: int) -> String:
 func format_mdhm(unix: int) -> String:
 	var d := local(unix)
 	return "%d/%d %02d:%02d" % [d["month"], d["day"], d["hour"], d["minute"]]
+
+
+func _bias() -> int:
+	return int(Time.get_time_zone_from_system().get("bias", 0)) * 60

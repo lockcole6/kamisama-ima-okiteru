@@ -34,7 +34,12 @@ var _time_label: Label
 var _weather_icon  # icon.gd
 var _presence_gauge  # gauge.gd
 var _presence_label: Label
-var _speed_chip: PanelContainer
+var _actions_chip: PanelContainer   # ちょっかい のこり●●
+var _sleep_btn: Button
+var _sleep_sub: Label
+var _sleep_pulse: Tween
+var _fade: ColorRect
+var _fade_label: Label
 var _wind_banner: PanelContainer
 var _toast: PanelContainer
 var _toast_label: Label
@@ -98,7 +103,6 @@ func _ready() -> void:
 			_next_banner())
 	LogManager.log_added.connect(func(_e): _refresh_feed())
 	Sim.state_changed.connect(_on_state_changed)
-	GameClock.speed_changed.connect(func(_s): _refresh_top())
 	_refresh_feed()
 
 
@@ -145,9 +149,9 @@ func _build_top() -> void:
 		_refresh_mute())
 	_refresh_mute.call_deferred()
 
-	_speed_chip = UITheme.chip("", UITheme.RED, Color.WHITE, 11)
-	_place(self, _speed_chip, Vector2(12, 50))
-	_speed_chip.visible = false
+	_actions_chip = UITheme.chip("", Color(1, 1, 1, 0.92), UITheme.INK, 12)
+	_actions_chip.add_theme_stylebox_override("panel", UITheme.box(Color(1, 1, 1, 0.92), 12, Color(0, 0, 0, 0), 0, 6))
+	_place(self, _actions_chip, Vector2(12, 50))
 
 	# 風の場所えらびの案内
 	_wind_banner = PanelContainer.new()
@@ -270,6 +274,7 @@ func _build_sheet() -> void:
 	_btns["rain"]["btn"].pressed.connect(_on_rain)
 	_btns["pray"]["btn"].pressed.connect(_on_pray_button)
 	_btns["book"]["btn"].pressed.connect(func(): open_scripture_requested.emit())
+	_build_sleep()
 
 
 func _action_button(parent: Control, rect: Rect2, col: Color, icon: String, title: String) -> Dictionary:
@@ -308,7 +313,7 @@ func _build_debug() -> void:
 	toggle.add_theme_font_override("font", UITheme.font(true))
 	toggle.add_theme_font_size_override("font_size", 10)
 	toggle.add_theme_color_override("font_color", Color(1, 1, 1, 0.9))
-	toggle.position = Vector2(296, SHEET_Y - 32)
+	toggle.position = Vector2(12, SHEET_Y - 32)
 	toggle.size = Vector2(54, 22)
 	add_child(toggle)
 
@@ -319,30 +324,14 @@ func _build_debug() -> void:
 		_debug_panel.visible = not _debug_panel.visible
 		if _debug_panel.visible:
 			UITheme.pop_in(_debug_panel, 0.95))
-	var note: Label = _place(_debug_panel, UITheme.label("テスト用（製品版には出ない）。速度＝時間の早送り：×60で10秒ごと、×600で1秒ごとに町が10分進む", 10, Color(1, 1, 1, 0.75)), Vector2(12, 8))
-	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var note: Label = _place(_debug_panel, UITheme.label("テスト用（製品版には出ない）", 10, Color(1, 1, 1, 0.75)), Vector2(12, 8))
 	note.size = Vector2(316, 0)
-	var y := 46.0
-	_place(_debug_panel, UITheme.label("速度", 10, Color(1, 1, 1, 0.6), true), Vector2(12, y + 6))
-	var x := 42.0
-	for s in [1, 60, 600]:
-		_small_button(_debug_panel, "×%d" % s, Rect2(x, y, 40, 26), func(): GameClock.set_speed(s))
-		x += 42
-	x += 6
-	for j in [["朝", 6], ["昼", 9], ["夕", 17], ["夜", 22]]:
-		var h: int = j[1]
-		_small_button(_debug_panel, j[0] + "へ", Rect2(x, y, 38, 26), func(): Sim.fast_forward(GameClock.seconds_until_hour(h)))
-		x += 40
-	y += 34
-	_place(_debug_panel, UITheme.label("放置", 10, Color(1, 1, 1, 0.6), true), Vector2(12, y + 6))
-	x = 42.0
-	for hrs in [3, 12, 24, 72]:
-		_small_button(_debug_panel, "%dh" % hrs, Rect2(x, y, 40, 26), func(): Sim.debug_absence(hrs * 3600))
-		x += 42
-	x += 6
-	_small_button(_debug_panel, "CD解除", Rect2(x, y, 52, 26), _on_clear_cooldowns, UITheme.MINT)
-	x += 56
-	_small_button(_debug_panel, "初期化", Rect2(x, y, 52, 26), _on_reset, UITheme.RED)
+	var y := 34.0
+	_small_button(_debug_panel, "回数を戻す", Rect2(12, y, 100, 30), _on_refill, UITheme.MINT)
+	_small_button(_debug_panel, "1日すすめる", Rect2(120, y, 100, 30), func(): Sim.debug_skip_day(), UITheme.PURPLE)
+	_small_button(_debug_panel, "初期化", Rect2(228, y, 100, 30), _on_reset, UITheme.RED)
+	_debug_panel.size.y = 76
+	_debug_panel.position.y = SHEET_Y - 118
 
 
 func _small_button(parent: Control, text: String, rect: Rect2, cb: Callable, col: Color = UITheme.PURPLE) -> Button:
@@ -686,7 +675,7 @@ func _refresh_card() -> void:
 			_wish_hint.text = "つつく・夢・風・雨のどれかが届くと、%sなりに「答え」と受け取る。何もしなければ無視になる。" % r["name"]
 		if not was:
 			_result_box.visible = false  # 新しい祈りが来たら前の結果は消す
-	_poke_btn.disabled = r["state"] == "dead"
+	_poke_btn.disabled = r["state"] == "dead" or not Sim.can_act()
 	_actions.visible = r["state"] != "dead"  # 亡くなった住民にはもう何もできない
 	var reason := Sim.dream_block_reason(r)
 	_dream_btn.disabled = reason != ""
@@ -835,7 +824,7 @@ func _refresh_top() -> void:
 	var d := GameClock.local(now)
 	var hour: int = d["hour"]
 	_day_label.text = "%d日目" % Sim.day
-	_time_label.text = "%d/%d %02d:%02d" % [d["month"], d["day"], hour, d["minute"]]
+	_time_label.text = "%s %02d:%02d" % [Sim.segment_name(), hour, d["minute"]]
 	if Sim.weather == "rain":
 		_weather_icon.set_kind("rain", UITheme.SKY)
 	elif hour >= 19 or hour < 5:
@@ -845,11 +834,21 @@ func _refresh_top() -> void:
 	_presence_gauge.set_value(Sim.god_presence)
 	_presence_gauge.color = UITheme.RED if Sim.god_presence < 20.0 else UITheme.GOLD
 	_presence_label.text = "%d" % roundi(Sim.god_presence)
-	_speed_chip.visible = GameClock.speed != 1.0
-	if _speed_chip.visible:
-		_speed_chip.get_node("Text").text = "早送り中 ×%d" % GameClock.speed
-	_set_btn("wind", Sim.can_wind(), "場所をえらぶ" if Sim.can_wind() else "あと%d分" % ceili(Sim.wind_cooldown_left() / 60.0))
-	_set_btn("rain", Sim.can_rain(), "町じゅうに" if Sim.can_rain() else "あと%d分" % ceili(Sim.rain_cooldown_left() / 60.0))
+	var dots := "●".repeat(Sim.actions_left) + "○".repeat(Sim.ACTIONS_PER_SEGMENT - Sim.actions_left)
+	_actions_chip.get_node("Text").text = "ちょっかい %s" % dots
+	var spent := "眠ると戻る"
+	_set_btn("wind", Sim.can_wind(), "場所をえらぶ" if Sim.can_wind() else spent)
+	_set_btn("rain", Sim.can_rain(), "町じゅうに" if Sim.can_rain() else spent)
+	_sleep_sub.text = "→ %s" % Sim.next_segment_name()
+	# 使い切ったら「眠る」がふわっと光る
+	if not Sim.can_act() and _sleep_pulse == null:
+		_sleep_pulse = _sleep_btn.create_tween().set_loops()
+		_sleep_pulse.tween_property(_sleep_btn, "scale", Vector2(1.08, 1.08), 0.5).set_trans(Tween.TRANS_SINE)
+		_sleep_pulse.tween_property(_sleep_btn, "scale", Vector2.ONE, 0.5).set_trans(Tween.TRANS_SINE)
+	elif Sim.can_act() and _sleep_pulse != null:
+		_sleep_pulse.kill()
+		_sleep_pulse = null
+		_sleep_btn.scale = Vector2.ONE
 	var n := Sim.praying_residents().size()
 	_set_btn("pray", n > 0, "%d人" % n if n > 0 else "いまは静か")
 	var active := Doctrine.active().size()
@@ -876,18 +875,16 @@ func _refresh_feed() -> void:
 			row["text"].add_theme_color_override("font_color", col if i == 0 else col.lerp(UITheme.INK_SOFT, 0.6))
 
 
-func _on_clear_cooldowns() -> void:
-	Sim.rain_cooldown_until = 0
-	Sim.wind_cooldown_until = 0
+func _on_refill() -> void:
+	Sim.actions_left = Sim.ACTIONS_PER_SEGMENT
 	Sim.dream_night = -1
-	_refresh_top()
+	Sim.state_changed.emit()
 
 
 func _on_reset() -> void:
 	close_popup()
 	SaveManager.delete_save()
-	GameClock.offset = 0.0
-	GameClock.set_speed(1.0)
+	Sim.guide_seen = []
 	Sim.new_game()
 	SaveManager.save_game()
 	Sim.state_changed.emit()
@@ -999,3 +996,62 @@ func _hide_banner() -> void:
 	tw.tween_callback(func():
 		_banner.visible = false
 		_next_banner())
+
+
+# ------------------------------------------------------------
+# 眠る（次の時間帯へ）
+# ------------------------------------------------------------
+
+func _build_sleep() -> void:
+	_sleep_btn = Button.new()
+	var night := Color("4b3a9a")
+	UITheme.style_button(_sleep_btn, night, Color.WHITE, 34, 13)
+	_sleep_btn.position = Vector2(280, SHEET_Y - 92)
+	_sleep_btn.size = Vector2(70, 72)
+	add_child(_sleep_btn)
+	var vb := VBoxContainer.new()
+	vb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vb.offset_bottom = -4
+	vb.alignment = BoxContainer.ALIGNMENT_CENTER
+	vb.add_theme_constant_override("separation", -2)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sleep_btn.add_child(vb)
+	var ic := Icon.make("moon", Color("ffe28a"), 22)
+	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	vb.add_child(ic)
+	var t := UITheme.label("眠る", 14, Color.WHITE, true)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(t)
+	_sleep_sub = UITheme.label("", 9, Color(1, 1, 1, 0.8), true)
+	_sleep_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vb.add_child(_sleep_sub)
+	_sleep_btn.pressed.connect(_on_sleep)
+
+	# 眠るときの暗転
+	_fade = ColorRect.new()
+	_fade.color = Color("140e2a")
+	_fade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fade.visible = false
+	add_child(_fade)
+	_fade_label = UITheme.label("", 18, Color("ffe28a"), true)
+	_fade_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_fade_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fade_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_fade.add_child(_fade_label)
+
+
+func _on_sleep() -> void:
+	if _fade.visible:
+		return
+	close_popup()
+	set_wind_mode(false)
+	Audio.play("sleep")
+	_fade_label.text = "Zzz……\n%sへ" % Sim.next_segment_name()
+	_fade.visible = true
+	_fade.modulate.a = 0.0
+	var tw := create_tween()
+	tw.tween_property(_fade, "modulate:a", 1.0, 0.45)
+	tw.tween_interval(0.35)
+	tw.tween_callback(func(): Sim.sleep())
+	tw.tween_property(_fade, "modulate:a", 0.0, 0.5)
+	tw.tween_callback(func(): _fade.visible = false)

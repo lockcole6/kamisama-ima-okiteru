@@ -1,24 +1,33 @@
 extends Node
 ## 町の状態とシミュレーション本体。表示には一切依存しない。
-## 1ティック = 現実10分。オフライン中は表示なしでティックを一括実行する。
+## 1ティック = ゲーム内10分。時間はカミサマが「眠る」ときだけ進む（現実の時刻とはつながっていない）。
+## 1日は5つの時間帯（朝・昼・夕方・夜・深夜）。1つの時間帯でできるちょっかいは2回まで。
 ## 教義のロジックは Doctrine.gd（CONCEPT.md 6章）。
 
 signal state_changed
 signal resident_bubble(id: String, text: String)
 signal away_report(seconds: int, events: Array)
+## 眠って目覚めた：前の時間帯・今の時間帯・その間の出来事
+signal woke_up(from_seg: Dictionary, to_seg: Dictionary, events: Array)
 signal god_woke
 signal prayer_started(id: String)
 signal prayer_answered(id: String, good: bool)
 
 const TICK := 600
-const MAX_OFFLINE_TICKS := 72 * 6        # オフライン進行の上限 72時間
-const ABSENCE_THRESHOLD := 3600          # これ以上の空白はオフライン一括進行
-const REPORT_THRESHOLD := 600            # これ以上あけて開いたら「おかえりなさい」を出す
 const RAIN_TICKS := 18                   # 雨の長さ 3時間
-const RAIN_COOLDOWN := 3600              # 雨のクールダウン 現実1時間
-const WIND_COOLDOWN := 1800              # 風のクールダウン 現実30分
 const POKE_SPAM_WINDOW_MS := 60000       # この間に同じ住民を連打すると災い率アップ
-const PRAYER_SECONDS := 12 * 3600        # 祈りは半日待つ（通知なしでも気づけるように）
+const PRAYER_SECONDS := 12 * 3600        # 祈りは半日（2〜3時間帯）待つ
+const ACTIONS_PER_SEGMENT := 2           # 1つの時間帯でできるちょっかいの回数
+const PRESENCE_DECAY := 0.12             # 1ティックごとの存在感の減り（何もしないと下がる）
+
+## 1日の時間帯。カミサマは hour の時刻に目を覚ます
+const SEGMENTS := [
+	{"id": "morning", "name": "朝", "hour": 7.5},
+	{"id": "noon", "name": "昼", "hour": 12.0},
+	{"id": "evening", "name": "夕方", "hour": 18.5},
+	{"id": "night", "name": "夜", "hour": 21.5},
+	{"id": "midnight", "name": "深夜", "hour": 1.0},
+]
 
 ## 場所ID → タイル座標（住民が立つ位置）。Town.gd の建物配置と対応
 const PLACES := {
@@ -53,8 +62,8 @@ var day: int = 1
 var god_presence: float = 60.0
 var weather: String = "sunny"
 var rain_ticks_left: int = 0
-var rain_cooldown_until: int = 0
-var wind_cooldown_until: int = 0
+var segment: int = 0                     # SEGMENTS の番号
+var actions_left: int = ACTIONS_PER_SEGMENT
 var dream_night: int = -1                # 夢を見せた夜（1晩に1回）
 var blooms: Array = []                   # 風が運んだ花 {place, day, bloomed, seed}
 var residents: Array = []
@@ -91,12 +100,14 @@ func boot() -> void:
 	if not SaveManager.load_game():
 		new_game()
 	running = true
-	check_absence()
+	state_changed.emit()
+	god_woke.emit()
 
 
 func new_game() -> void:
 	var f := FileAccess.open("res://data/residents.json", FileAccess.READ)
 	var arr: Array = JSON.parse_string(f.get_as_text())
+	GameClock.start_today(SEGMENTS[0]["hour"])
 	var now := GameClock.now()
 	residents = []
 	for d in arr:
@@ -115,8 +126,8 @@ func new_game() -> void:
 	god_presence = 60.0
 	weather = "sunny"
 	rain_ticks_left = 0
-	rain_cooldown_until = 0
-	wind_cooldown_until = 0
+	segment = 0
+	actions_left = ACTIONS_PER_SEGMENT
 	dream_night = -1
 	god_dead_declared = false
 	god_dead_last_day = -1
@@ -131,74 +142,62 @@ func new_game() -> void:
 		_apply_schedule(r, hour)
 	LogManager.clear()
 	_log("welcome")
+	_log("segment_start", {"day": day, "name": SEGMENTS[0]["name"]})
+	# 朝の祈りが始まっている状態で目を覚ます
+	_quiet = true
+	for i in 9:
+		_auto_events(GameClock.hour(now))
+	_quiet = false
 
 
-func _process(_delta: float) -> void:
-	if not running:
-		return
-	var now := GameClock.now()
-	# PCのスリープ復帰などで大きく空いたら留守扱い
-	if now - last_tick >= ABSENCE_THRESHOLD + TICK:
-		check_absence()
-		return
-	var n := 0
-	while now - last_tick >= TICK and n < 30:
+## カミサマが眠る → 次の時間帯まで町が進み、目覚めると間の出来事が分かる
+func sleep() -> Dictionary:
+	var from_seg: Dictionary = SEGMENTS[segment]
+	var next := (segment + 1) % SEGMENTS.size()
+	var to_seg: Dictionary = SEGMENTS[next]
+	var target := GameClock.now() + GameClock.seconds_until(to_seg["hour"])
+	_quiet = true
+	LogManager.begin_capture()
+	while last_tick + TICK <= target:
 		_tick(last_tick + TICK)
-		n += 1
-	if n > 0:
-		state_changed.emit()
-		SaveManager.save_game()
-
-
-## 起動・復帰時に呼ぶ。空白時間ぶんを表示なしで進め、留守中の出来事を通知する
-func check_absence() -> void:
-	var now := GameClock.now()
-	var away := now - last_seen
-	var events: Array = []
-	if away >= ABSENCE_THRESHOLD or now - last_tick >= ABSENCE_THRESHOLD:
-		events = _run_offline(now)
-	if away >= ABSENCE_THRESHOLD:
-		_t = now
-		god_presence = clampf(god_presence + 5.0, 0.0, 100.0)
-		_log("god_wake", {"duration": format_duration(away)})
-	if away >= REPORT_THRESHOLD:
-		away_report.emit(away, events)
+	GameClock.time = target
+	segment = next
+	actions_left = ACTIONS_PER_SEGMENT
+	_t = target
+	var events := LogManager.end_capture()
+	_quiet = false
+	_log("segment_start", {"day": day, "name": to_seg["name"]})
 	state_changed.emit()
 	god_woke.emit()
+	woke_up.emit(from_seg, to_seg, events)
 	SaveManager.save_game()
+	return {"from": from_seg, "to": to_seg, "events": events}
 
 
-func _run_offline(now: int) -> Array:
-	var ticks := (now - last_tick) / TICK
-	if ticks > MAX_OFFLINE_TICKS:
-		last_tick = (now - now % TICK) - MAX_OFFLINE_TICKS * TICK
-		ticks = MAX_OFFLINE_TICKS
-	_offline = true
-	LogManager.begin_capture()
-	for i in ticks:
-		_tick(last_tick + TICK)
-	var events := LogManager.end_capture()
-	_offline = false
-	return events
+func segment_name() -> String:
+	return SEGMENTS[segment]["name"]
 
 
-## デバッグ：時刻を進めて、その間を「起動中」としてティックを回す
-func fast_forward(seconds: int) -> void:
-	GameClock.advance(seconds)
-	var now := GameClock.now()
-	_quiet = true
-	while now - last_tick >= TICK:
-		_tick(last_tick + TICK)
-	_quiet = false
-	state_changed.emit()
-	SaveManager.save_game()
+func next_segment_name() -> String:
+	return SEGMENTS[(segment + 1) % SEGMENTS.size()]["name"]
 
 
-## デバッグ：N秒放置したことにする
-func debug_absence(seconds: int) -> void:
-	SaveManager.save_game()
-	GameClock.advance(seconds)
-	check_absence()
+## ちょっかいを1回使う。使えなければ false
+func _spend() -> bool:
+	if actions_left <= 0:
+		return false
+	actions_left -= 1
+	return true
+
+
+func can_act() -> bool:
+	return actions_left > 0
+
+
+## デバッグ：1日ぶん（5回）眠る
+func debug_skip_day() -> void:
+	for i in SEGMENTS.size():
+		sleep()
 
 
 func _tick(t: int) -> void:
@@ -209,8 +208,8 @@ func _tick(t: int) -> void:
 	if hour == 0 and int(d["minute"]) < 10:
 		day += 1
 
-	# カミサマ不在：開いていない間は存在感が大きく下がる。開いていても放置で少しずつ下がる
-	god_presence = clampf(god_presence - (0.35 if _offline else 0.1), 0.0, 100.0)
+	# カミサマの存在感は、何もしないと少しずつ下がる
+	god_presence = clampf(god_presence - PRESENCE_DECAY, 0.0, 100.0)
 
 	if rain_ticks_left > 0:
 		rain_ticks_left -= 1
@@ -548,7 +547,7 @@ func _apply_fx(r: Dictionary, fx: Dictionary) -> void:
 ## 戻り値 { "result": 結果キー, "lines": 出たログ文 }
 func poke(id: String) -> Dictionary:
 	var r := _find(id)
-	if r.is_empty() or r["state"] == "dead":
+	if r.is_empty() or r["state"] == "dead" or not _spend():
 		return {}
 	_t = GameClock.now()
 	LogManager.begin_capture()
@@ -652,6 +651,8 @@ func dream_block_reason(r: Dictionary) -> String:
 		return "眠っているときだけ"
 	if not dream_available():
 		return "今夜はもう見せた"
+	if not can_act():
+		return "今はもう使い切った"
 	return ""
 
 
@@ -664,7 +665,7 @@ func dream_symbols() -> Array:
 
 func send_dream(id: String, symbols: Array) -> Dictionary:
 	var r := _find(id)
-	if r.is_empty() or dream_block_reason(r) != "" or symbols.is_empty():
+	if r.is_empty() or dream_block_reason(r) != "" or symbols.is_empty() or not _spend():
 		return {}
 	_t = GameClock.now()
 	LogManager.begin_capture()
@@ -734,19 +735,14 @@ func place_name(pid: String) -> String:
 
 
 func can_wind() -> bool:
-	return GameClock.now() >= wind_cooldown_until
-
-
-func wind_cooldown_left() -> int:
-	return maxi(0, wind_cooldown_until - GameClock.now())
+	return can_act()
 
 
 func blow_wind(place: String) -> Dictionary:
-	if not can_wind() or not PLACES.has(place):
+	if not PLACES.has(place) or not _spend():
 		return {}
 	_t = GameClock.now()
 	LogManager.begin_capture()
-	wind_cooldown_until = _t + WIND_COOLDOWN
 	god_presence = clampf(god_presence + 2.0, 0.0, 100.0)
 	var here: Array = _alive().filter(func(r): return r["pos"] == PLACES[place])
 	var awake_here: Array = here.filter(func(r): return r["state"] != "sleeping")
@@ -791,15 +787,11 @@ func blow_wind(place: String) -> Dictionary:
 # ------------------------------------------------------------
 
 func can_rain() -> bool:
-	return GameClock.now() >= rain_cooldown_until
-
-
-func rain_cooldown_left() -> int:
-	return maxi(0, rain_cooldown_until - GameClock.now())
+	return can_act()
 
 
 func make_rain() -> Dictionary:
-	if not can_rain():
+	if not _spend():
 		return {}
 	_t = GameClock.now()
 	LogManager.begin_capture()
@@ -807,7 +799,6 @@ func make_rain() -> Dictionary:
 	var assembly := hour >= 17 and hour < 21
 	weather = "rain"
 	rain_ticks_left = RAIN_TICKS
-	rain_cooldown_until = _t + RAIN_COOLDOWN
 	god_presence = clampf(god_presence + 2.0, 0.0, 100.0)
 	Doctrine.observe("rain", _awake(), 0, _t)
 	_log("rain_start")
@@ -877,7 +868,7 @@ func suggestion() -> Dictionary:
 	var hints := Doctrine.hints()
 	if not hints.is_empty():
 		return {"kind": "hint", "id": "", "text": "%sが、%sについて何か言いかけている。" % [hints[0]["name"], hints[0]["int"]]}
-	return {"kind": "none", "id": "", "text": "いまは、何もしなくてもいい。"}
+	return {"kind": "none", "id": "", "text": "いまは、何もしなくてもいい。「眠る」で次の時間へ。"}
 
 
 # ------------------------------------------------------------
@@ -1017,8 +1008,8 @@ func to_dict() -> Dictionary:
 		gs.append(c)
 	return {
 		"day": day, "god_presence": god_presence, "weather": weather,
-		"rain_ticks_left": rain_ticks_left, "rain_cooldown_until": rain_cooldown_until,
-		"wind_cooldown_until": wind_cooldown_until, "dream_night": dream_night, "blooms": blooms,
+		"rain_ticks_left": rain_ticks_left, "segment": segment, "actions_left": actions_left,
+		"dream_night": dream_night, "blooms": blooms,
 		"residents": rs, "graves": gs,
 		"last_tick": last_tick, "last_seen": last_seen,
 		"god_dead_declared": god_dead_declared, "god_dead_last_day": god_dead_last_day,
@@ -1031,8 +1022,8 @@ func from_dict(d: Dictionary) -> void:
 	god_presence = float(d["god_presence"])
 	weather = str(d["weather"])
 	rain_ticks_left = int(d["rain_ticks_left"])
-	rain_cooldown_until = int(d["rain_cooldown_until"])
-	wind_cooldown_until = int(d.get("wind_cooldown_until", 0))
+	segment = int(d.get("segment", 0))
+	actions_left = int(d.get("actions_left", ACTIONS_PER_SEGMENT))
 	dream_night = int(d.get("dream_night", -1))
 	blooms = d.get("blooms", [])
 	last_tick = int(d["last_tick"])
