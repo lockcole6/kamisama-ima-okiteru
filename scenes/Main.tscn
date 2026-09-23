@@ -1,0 +1,40 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="PackedScene" path="res://scenes/Town.tscn" id="2_town"]
+[ext_resource type="PackedScene" path="res://scenes/ui/HUD.tscn" id="3_hud"]
+[ext_resource type="PackedScene" path="res://scenes/ui/LogPanel.tscn" id="4_log"]
+[ext_resource type="PackedScene" path="res://scenes/ui/AwayReport.tscn" id="5_away"]
+
+[node name="Main" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_main")
+
+[node name="TownView" type="SubViewportContainer" parent="."]
+layout_mode = 0
+offset_right = 360.0
+offset_bottom = 400.0
+mouse_filter = 2
+stretch = true
+
+[node name="SubViewport" type="SubViewport" parent="TownView"]
+handle_input_locally = false
+size = Vector2i(360, 400)
+render_target_update_mode = 4
+
+[node name="Town" parent="TownView/SubViewport" instance=ExtResource("2_town")]
+
+[node name="HUD" parent="." instance=ExtResource("3_hud")]
+layout_mode = 1
+
+[node name="LogPanel" parent="." instance=ExtResource("4_log")]
+layout_mode = 1
+
+[node name="AwayReport" parent="." instance=ExtResource("5_away")]
+layout_mode = 1

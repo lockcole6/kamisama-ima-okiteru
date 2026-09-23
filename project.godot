@@ -1,0 +1,42 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="カミサマ、いま起きてる？"
+config/description="現実時間で勝手に進む町と、ちょっかいで運命が変わる手触りの検証用プロトタイプ"
+run/main_scene="res://scenes/Main.tscn"
+config/icon="res://icon.png"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[autoload]
+
+GameClock="*res://scripts/autoload/GameClock.gd"
+LogManager="*res://scripts/autoload/LogManager.gd"
+Doctrine="*res://scripts/autoload/Doctrine.gd"
+Sim="*res://scripts/autoload/Sim.gd"
+SaveManager="*res://scripts/autoload/SaveManager.gd"
+Audio="*res://scripts/autoload/Audio.gd"
+
+[display]
+
+window/size/viewport_width=360
+window/size/viewport_height=640
+window/size/window_width_override=540
+window/size/window_height_override=960
+window/stretch/mode="canvas_items"
+window/handheld/orientation=1
+
+[rendering]
+
+textures/vram_compression/import_etc2_astc=true
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"

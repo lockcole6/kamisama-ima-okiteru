@@ -1,0 +1,57 @@
+[
+	{
+		"id": "tome",
+		"name": "トメ",
+		"role": "パン屋",
+		"faith": 40,
+		"traits": ["信心深い", "働き者"],
+		"home": "house_tome",
+		"work": "bakery",
+		"color": "#e0a060",
+		"motto": "毎朝パンを1個、空に供える"
+	},
+	{
+		"id": "kaz",
+		"name": "カズ",
+		"role": "預言者見習い",
+		"faith": 80,
+		"traits": ["狂信的", "思い込みが強い"],
+		"home": "house_kaz",
+		"work": "shrine",
+		"color": "#d05858",
+		"motto": "カミサマの行動を全部「お告げ」と解釈する"
+	},
+	{
+		"id": "nob",
+		"name": "ノブ",
+		"role": "学者",
+		"faith": -20,
+		"traits": ["懐疑派", "理屈っぽい"],
+		"home": "house_nob",
+		"work": "study",
+		"color": "#5a7ad0",
+		"motto": "カミサマは自然現象だと主張している"
+	},
+	{
+		"id": "sen",
+		"name": "セン",
+		"role": "墓守",
+		"faith": 0,
+		"traits": ["無関心", "淡々"],
+		"home": "house_sen",
+		"work": "cemetery",
+		"color": "#8a8a8a",
+		"motto": "墓が増えると少し嬉しそう"
+	},
+	{
+		"id": "mimi",
+		"name": "ミミ",
+		"role": "子ども",
+		"faith": 10,
+		"traits": ["好奇心旺盛", "無邪気"],
+		"home": "house_mimi",
+		"work": "plaza",
+		"color": "#e878b8",
+		"motto": "空に向かって手を振る"
+	}
+]

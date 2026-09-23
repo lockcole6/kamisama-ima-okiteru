@@ -1,0 +1,13 @@
+# Godot
+.godot/
+export_credentials.cfg
+
+# 書き出し物（Web は gh-pages ブランチへ、APK はローカルのみ）
+build/
+*.apk
+*.aab
+*.keystore
+
+# 一時ファイル
+_t.gd
+__pycache__/
