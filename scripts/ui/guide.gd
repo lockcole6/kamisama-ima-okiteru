@@ -160,6 +160,14 @@ func _layout() -> void:
 	UITheme.pop_in(_card, 0.9)
 
 
+## 案内を最初から（設定・リセットから）
+func restart() -> void:
+	_flags = {}
+	_current = ""
+	_card.visible = false
+	_cooldown = 1.0
+
+
 func _dismiss() -> void:
 	if _current != "" and not Sim.guide_seen.has(_current):
 		Sim.guide_seen.append(_current)

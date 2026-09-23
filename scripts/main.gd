@@ -4,6 +4,7 @@ extends Control
 const UITheme := preload("res://scripts/ui/ui_theme.gd")
 const ScripturePanel := preload("res://scripts/ui/scripture_panel.gd")
 const Guide := preload("res://scripts/ui/guide.gd")
+const SettingsPanel := preload("res://scripts/ui/settings_panel.gd")
 
 @onready var town_view: SubViewportContainer = $TownView
 @onready var town_vp: SubViewport = $TownView/SubViewport
@@ -13,6 +14,7 @@ const Guide := preload("res://scripts/ui/guide.gd")
 @onready var away_report: Control = $AwayReport
 var scripture: Control
 var guide: Control
+var settings: Control
 
 
 func _ready() -> void:
@@ -30,7 +32,17 @@ func _ready() -> void:
 	guide = Guide.new()
 	add_child(guide)
 	move_child(guide, scripture.get_index())
-	guide.setup(hud, [log_panel, scripture, away_report])
+	settings = SettingsPanel.new()
+	add_child(settings)
+	hud.open_settings_requested.connect(settings.open)
+	settings.reset_requested.connect(func():
+		hud.reset_game()
+		guide.restart())
+	settings.guide_reset_requested.connect(func():
+		Sim.guide_seen = []
+		SaveManager.save_game()
+		guide.restart())
+	guide.setup(hud, [log_panel, scripture, away_report, settings])
 	away_report.suggestion_chosen.connect(_on_suggestion)
 	hud.open_log_requested.connect(log_panel.open)
 	hud.selection_changed.connect(town.select)
@@ -44,7 +56,7 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
 		return
-	if log_panel.visible or away_report.visible or scripture.visible or hud.is_popup_open():
+	if log_panel.visible or away_report.visible or scripture.visible or settings.visible or hud.is_popup_open():
 		return
 	var p: Vector2 = event.position - town_view.position
 	if hud.wind_mode:

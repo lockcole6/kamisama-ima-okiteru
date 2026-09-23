@@ -145,7 +145,7 @@ func _move(delta: float) -> void:
 		_wait -= delta
 		if _wait <= 0.0:
 			var still := praying or state == "praying" or state == "working"
-			var radius := 6.0 if still else 22.0
+			var radius := 3.0 if still else 12.0
 			_target = anchor + Vector2(randf_range(-radius, radius), randf_range(-radius * 0.5, radius * 0.5))
 			_target = _target.clamp(Vector2(8, 16), Vector2(352, 392))
 			_wait = randf_range(2.5, 6.0) if still else randf_range(0.8, 3.0)

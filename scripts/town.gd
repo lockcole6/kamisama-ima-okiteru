@@ -22,6 +22,9 @@ var _t := 0.0
 var _fireflies: Array = []
 var _winds: Array = []   # 風の演出 {pos, t}
 
+## 同じ場所にいる住民の立ち位置のずらし方（重ならないように）
+const SLOTS := [Vector2(0, 0), Vector2(-16, 3), Vector2(16, 3), Vector2(-8, -9), Vector2(8, -9), Vector2(0, 12), Vector2(-24, -6), Vector2(24, -6)]
+
 
 func _ready() -> void:
 	_bg = Sprite2D.new()
@@ -55,6 +58,7 @@ static func tile_to_px(v: Vector2i) -> Vector2:
 
 
 func refresh() -> void:
+	var taken: Dictionary = {}  # 場所 → 何人目か
 	for r in Sim.residents:
 		var id: String = r["id"]
 		if not _nodes.has(id):
@@ -62,7 +66,11 @@ func refresh() -> void:
 			_people.add_child(n)
 			n.setup(r, tile_to_px(r["pos"]))
 			_nodes[id] = n
-		_nodes[id].sync(r, tile_to_px(r["pos"]))
+		var slot := 0
+		if r["state"] != "dead":
+			slot = int(taken.get(r["pos"], 0))
+			taken[r["pos"]] = slot + 1
+		_nodes[id].sync(r, tile_to_px(r["pos"]) + SLOTS[slot % SLOTS.size()])
 		_nodes[id].shade = _shade
 	if _graves.get_child_count() != Sim.graves.size():
 		for c in _graves.get_children():
@@ -104,18 +112,29 @@ func on_god_woke() -> void:
 func pick(p: Vector2) -> Dictionary:
 	if p.y < 0 or p.y > AREA.y:
 		return {}
+	# 体と吹き出しを含む四角形で当たりを取り、重なっていたら手前（足元が下）の住民を選ぶ
 	var best := ""
-	var best_d := 14.0
+	var best_y := -INF
 	for id in _nodes:
 		var n: Node2D = _nodes[id]
 		if not n.visible:
 			continue
-		var d := (n.position + Vector2(0, -8)).distance_to(p)
-		if n.praying:  # 祈りの吹き出しもタップ対象
-			d = minf(d, (n.position + Vector2(0, -26)).distance_to(p))
-		if d < best_d:
-			best_d = d
+		var top := -36.0 if n.praying or n.dreaming else -22.0
+		var hit := Rect2(n.position + Vector2(-11, top), Vector2(22, -top + 8))
+		if hit.has_point(p) and n.position.y > best_y:
+			best_y = n.position.y
 			best = id
+	if best == "":
+		# 少し外れていても、近ければ拾う
+		var best_d := 18.0
+		for id in _nodes:
+			var n: Node2D = _nodes[id]
+			if not n.visible:
+				continue
+			var d := (n.position + Vector2(0, -8)).distance_to(p)
+			if d < best_d:
+				best_d = d
+				best = id
 	if best != "":
 		return {"type": "resident", "id": best}
 	for i in Sim.graves.size():

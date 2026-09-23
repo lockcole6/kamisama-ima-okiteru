@@ -114,6 +114,13 @@ func _draw() -> void:
 			else:
 				draw_line(Vector2(16, 8), Vector2(22, 16), c, 2.2, true)
 				draw_line(Vector2(22, 8), Vector2(16, 16), c, 2.2, true)
+		"gear":
+			for i in 8:
+				var a := i * PI / 4.0
+				var d := Vector2(cos(a), sin(a))
+				draw_line(Vector2(12, 12) + d * 6.5, Vector2(12, 12) + d * 10.0, c, 3.6, true)
+			draw_circle(Vector2(12, 12), 7.2, c)
+			draw_circle(Vector2(12, 12), 3.0, Color(1, 1, 1, 1))
 		"clock":
 			draw_arc(Vector2(12, 12), 8.5, 0, TAU, 32, c, 2.2, true)
 			draw_line(Vector2(12, 12), Vector2(12, 7), c, 2.2, true)

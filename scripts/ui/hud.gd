@@ -6,6 +6,7 @@ signal open_log_requested
 signal open_scripture_requested
 signal selection_changed(id: String)
 signal card_opened
+signal open_settings_requested
 
 const UITheme := preload("res://scripts/ui/ui_theme.gd")
 const Icon := preload("res://scripts/ui/icon.gd")
@@ -133,6 +134,7 @@ func _build_top() -> void:
 	_place(right, Icon.make("halo", UITheme.GOLD, 22), Vector2(8, 6))
 	_place(right, UITheme.label("存在感", 10, UITheme.INK_SOFT, true), Vector2(34, 2))
 	_presence_gauge = _place(right, Gauge.new(), Vector2(34, 19))
+	_presence_gauge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_presence_gauge.size = Vector2(76, 8)
 	_presence_gauge.color = UITheme.GOLD
 	_presence_label = _place(right, UITheme.label("", 13, UITheme.INK, true), Vector2(116, 7))
@@ -148,6 +150,16 @@ func _build_top() -> void:
 		Audio.toggle_mute()
 		_refresh_mute())
 	_refresh_mute.call_deferred()
+	var gear := Button.new()
+	for st in ["normal", "hover", "pressed", "focus"]:
+		gear.add_theme_stylebox_override(st, UITheme.box(Color(1, 1, 1, 0.92), 15, Color(0, 0, 0, 0), 0, 6))
+	gear.position = Vector2(282, 50)
+	gear.size = Vector2(30, 30)
+	add_child(gear)
+	_place(gear, Icon.make("gear", UITheme.PURPLE, 18), Vector2(6, 6))
+	gear.pressed.connect(func():
+		Audio.play("open")
+		open_settings_requested.emit())
 
 	_actions_chip = UITheme.chip("", Color(1, 1, 1, 0.92), UITheme.INK, 12)
 	_actions_chip.add_theme_stylebox_override("panel", UITheme.box(Color(1, 1, 1, 0.92), 12, Color(0, 0, 0, 0), 0, 6))
@@ -881,8 +893,17 @@ func _on_refill() -> void:
 	Sim.state_changed.emit()
 
 
+## データを消して最初から（設定・デバッグから）
+func reset_game() -> void:
+	_on_reset()
+
+
 func _on_reset() -> void:
 	close_popup()
+	set_wind_mode(false)
+	_banner_queue.clear()
+	_banner.visible = false
+	_toast.visible = false
 	SaveManager.delete_save()
 	Sim.guide_seen = []
 	Sim.new_game()
@@ -900,7 +921,7 @@ func _panel(parent: Control, rect: Rect2, sb: StyleBox) -> Panel:
 	p.position = rect.position
 	p.size = rect.size
 	p.add_theme_stylebox_override("panel", sb)
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE if parent == self and rect.size.y < 60 else Control.MOUSE_FILTER_STOP
+	p.mouse_filter = Control.MOUSE_FILTER_IGNORE if rect.size.y < 60 else Control.MOUSE_FILTER_STOP
 	parent.add_child(p)
 	return p
 

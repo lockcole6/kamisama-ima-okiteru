@@ -16,6 +16,8 @@ const BUBBLE_SFX := {
 }
 
 var muted := false
+var music_volume := 0.8   # 0..1（BGM・環境音）
+var sfx_volume := 0.8     # 0..1（効果音）
 
 var _bgm: Array = []            # [AudioStreamPlayer, AudioStreamPlayer]（クロスフェード用）
 var _bgm_cur := 0
@@ -29,18 +31,27 @@ var _check := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	for bus in ["Music", "SFX"]:
+		if AudioServer.get_bus_index(bus) < 0:
+			AudioServer.add_bus()
+			var i := AudioServer.bus_count - 1
+			AudioServer.set_bus_name(i, bus)
+			AudioServer.set_bus_send(i, "Master")
 	for i in 2:
 		var p := AudioStreamPlayer.new()
+		p.bus = "Music"
 		p.volume_db = -80.0
 		p.finished.connect(p.play)  # ループ情報が読めなかったときの保険
 		add_child(p)
 		_bgm.append(p)
 	_amb = AudioStreamPlayer.new()
+	_amb.bus = "Music"
 	_amb.volume_db = -80.0
 	_amb.finished.connect(_amb.play)
 	add_child(_amb)
 	for i in 6:
 		var p := AudioStreamPlayer.new()
+		p.bus = "SFX"
 		p.volume_db = SFX_DB
 		add_child(p)
 		_sfx.append(p)
@@ -51,7 +62,10 @@ func _ready() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) == OK:
 		muted = bool(cfg.get_value("audio", "muted", false))
+		music_volume = float(cfg.get_value("audio", "music", 0.8))
+		sfx_volume = float(cfg.get_value("audio", "sfx", 0.8))
 	_apply_mute()
+	_apply_volumes()
 
 
 func _stream(name: String) -> AudioStream:
@@ -80,9 +94,30 @@ func play_for_bubble(text: String) -> void:
 func toggle_mute() -> void:
 	muted = not muted
 	_apply_mute()
+	_save_settings()
+
+
+func set_volumes(music: float, sfx: float) -> void:
+	music_volume = clampf(music, 0.0, 1.0)
+	sfx_volume = clampf(sfx, 0.0, 1.0)
+	_apply_volumes()
+	_save_settings()
+
+
+func _apply_volumes() -> void:
+	for pair in [["Music", music_volume], ["SFX", sfx_volume]]:
+		var i := AudioServer.get_bus_index(pair[0])
+		if i >= 0:
+			AudioServer.set_bus_volume_db(i, linear_to_db(maxf(0.0001, pair[1])))
+			AudioServer.set_bus_mute(i, pair[1] <= 0.001)
+
+
+func _save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.load(SETTINGS_PATH)
 	cfg.set_value("audio", "muted", muted)
+	cfg.set_value("audio", "music", music_volume)
+	cfg.set_value("audio", "sfx", sfx_volume)
 	cfg.save(SETTINGS_PATH)
 
 

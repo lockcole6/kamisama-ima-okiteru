@@ -51,6 +51,7 @@ func _ready() -> void:
 	_scroll.position = Vector2(12, 60)
 	_scroll.size = Vector2(336, 640 - TOP - 70)
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.scroll_deadzone = 6
 	_sheet.add_child(_scroll)
 	_list = VBoxContainer.new()
 	_list.custom_minimum_size = Vector2(326, 0)
@@ -94,6 +95,7 @@ func _entry(e: Dictionary) -> Control:
 	sb.content_margin_bottom = 9
 	var p := PanelContainer.new()
 	p.add_theme_stylebox_override("panel", sb)
+	p.mouse_filter = Control.MOUSE_FILTER_PASS
 	var vb := VBoxContainer.new()
 	vb.add_theme_constant_override("separation", 2)
 	p.add_child(vb)
